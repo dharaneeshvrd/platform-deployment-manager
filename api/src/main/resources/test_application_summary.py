@@ -17,43 +17,42 @@ class AppplicationSummaryTests(unittest.TestCase):
         {'aggregate_status': 'RUNNING_WITH_ERRORS', 'yarnId': '1234'}})
         self.assertEqual(result, 'RUNNING_WITH_ERRORS')
 
-    @patch('application_summary.check_in_yarn')
     @patch('application_summary.spark_job_handler')
-    def test_spark_application(self, spark_job_patch, yarn_check_patch):
+    def test_spark_yarn_handler(self, spark_job_patch):
         """
         Tetsing Spark application
         """
         #Spark application in case of Killed
-        yarn_check_patch.return_value = {'id': 'application_1234', 'state': 'KILLED', 'finalStatus': 'KILLED', \
+        input_data = {'id': 'application_1234', 'state': 'KILLED', 'finalStatus': 'KILLED', \
         'diagnostics': 'Killed'}
-        result = application_summary.spark_application('app1-example-job')
-        self.assertEqual(result['aggregate_status'], '%s' % ('KILLED'))
+        result = application_summary.spark_yarn_handler(input_data)
+        self.assertEqual(result[0], '%s' % ('KILLED'))
 
         #Spark application in case of Failed
-        yarn_check_patch.return_value = {'id': 'application_1234', 'state': 'FINISHED', 'finalStatus': 'FAILED', \
+        input_data = {'id': 'application_1234', 'state': 'FINISHED', 'finalStatus': 'FAILED', \
         'diagnostics': 'Failed'}
-        result = application_summary.spark_application('app1-example-job')
-        self.assertEqual(result['aggregate_status'], '%s' % ('FINISHED_FAILED'))
+        result = application_summary.spark_yarn_handler(input_data)
+        self.assertEqual(result[0], '%s' % ('FINISHED_FAILED'))
 
         #Spark application in case of Running with No errors
-        yarn_check_patch.return_value = {'id': 'application_1234', 'state': 'RUNNING', \
+        input_data = {'id': 'application_1234', 'state': 'RUNNING', \
         'finalStatus': 'UNDEFINED'}
         spark_job_patch.return_value = {'state': 'OK', 'information': 'job_stage data'}
-        result = application_summary.spark_application('app1-example-job')
-        self.assertEqual(result['aggregate_status'], '%s' % ('RUNNING'))
+        result = application_summary.spark_yarn_handler(input_data)
+        self.assertEqual(result[0], '%s' % ('RUNNING'))
 
         #Spark application in case of Running with errors
-        yarn_check_patch.return_value = {'id': 'application_1234', 'state': 'RUNNING', \
+        input_data = {'id': 'application_1234', 'state': 'RUNNING', \
         'finalStatus': 'UNDEFINED'}
         spark_job_patch.return_value = {'state': 'ERROR', 'information': 'job_stage data'}
-        result = application_summary.spark_application('app1-example-job')
-        self.assertEqual(result['aggregate_status'], '%s' % ('RUNNING_WITH_ERRORS'))
+        result = application_summary.spark_yarn_handler(input_data)
+        self.assertEqual(result[0], '%s' % ('RUNNING_WITH_ERRORS'))
 
         #Spark application in other states than above states
-        yarn_check_patch.return_value = {'id': 'application_1234', 'state': 'ACCEPTED', \
+        input_data = {'id': 'application_1234', 'state': 'ACCEPTED', \
         'finalStatus': 'UNDEFINED', 'diagnostics': 'Accepted'}
-        result = application_summary.spark_application('app1-example-job')
-        self.assertEqual(result['aggregate_status'], '%s' % ('ACCEPTED'))
+        result = application_summary.spark_yarn_handler(input_data)
+        self.assertEqual(result[0], '%s' % ('ACCEPTED'))
 
     @patch('requests.get')
     def test_check_in_yarn(self, mock_req):
