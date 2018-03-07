@@ -8,6 +8,6 @@ WorkingDirectory=/opt/${environment_namespace}/${component_application}/${compon
 ExecStartPre=/opt/${environment_namespace}/${component_application}/${component_name}/yarn-kill.py
 ExecStopPost=/opt/${environment_namespace}/${component_application}/${component_name}/yarn-kill.py
 Environment=FLINK_VERSION=${component_flink_version}
-ExecStart=/opt/pnda/flink-1.4.0/bin/flink run -m  yarn-cluster ${component_flink_run_args} --class ${component_main_class} ${component_main_jar} ${component_input_parameters} ${component_output_parameters}
+ExecStart=/opt/pnda/flink-1.4.0/bin/flink run -m  yarn-cluster ${component_flink_run_args} --class ${component_main_class} ${component_main_jar} ${component_application_args}
 ${respawn}
 ${respawn_limit}
