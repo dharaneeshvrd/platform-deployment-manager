@@ -77,8 +77,8 @@ class FlinkCreator(Creator):
 
         if 'component_flink_version' not in properties:
             properties['component_flink_version'] = '1.4'
-        if 'component_flink_run_args' not in properties:
-            properties['component_flink_run_args'] = ''
+        if 'component_flink_config_args' not in properties:
+            properties['component_flink_config_args'] = ''
         if 'component_application_args' not in properties:
             properties['component_application_args'] = ''
         # Commented out, as Currently not supporting pyflink.

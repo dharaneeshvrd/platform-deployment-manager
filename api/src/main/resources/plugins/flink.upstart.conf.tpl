@@ -8,4 +8,5 @@ pre-start exec /opt/${environment_namespace}/${component_application}/${componen
 pre-stop exec /opt/${environment_namespace}/${component_application}/${component_name}/yarn-kill.py
 env programDir=/opt/${environment_namespace}/${component_application}/${component_name}/
 chdir /opt/${environment_namespace}/${component_application}/${component_name}/
-exec /opt/pnda/flink-1.4.0/bin/flink run -m yarn-cluster ${component_flink_run_args} --class ${component_main_class} ${component_main_jar}  ${component_application_args}
+exec flink run -m yarn-cluster ${component_flink_config_args} -ynm ${component_job_name} --class ${component_main_class} ${component_main_jar}  ${component_application_args}
+
