@@ -82,6 +82,16 @@ class HBaseAppplicationSummary(object):
             connection.close()
         return data
 
+    def get_flink_job_id(self, key):
+        jid = ''
+        data = self._read_from_db(key)
+        if data:
+            data = json.loads(data['cf:component_data'])
+            for component in data:
+                if 'flink' in component:
+                    jid = str(data[component]['information'].get('flinkJid', ''))
+        return jid
+
     def get_status_with_timestamp(self, key):
         try:
             connection = happybase.Connection(self._hbase_host)
