@@ -158,6 +158,7 @@ class FlinkCreator(Creator):
         commands.append('sudo cp %s/%s %s' % (remote_component_tmp_path, service_script, service_script_install_path))
         commands.append('sudo cp %s/* %s' % (remote_component_tmp_path, remote_component_install_path))
         commands.append('sudo chmod a+x %s/flink-cancel.py' % (remote_component_install_path))
+
         if main_jar_name is not None:
             commands.append('cd %s && sudo jar uf %s application.properties' % (remote_component_install_path, main_jar_name))
         commands.append('sudo rm -rf %s' % (remote_component_tmp_path))
