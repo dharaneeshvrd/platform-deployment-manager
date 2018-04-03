@@ -98,7 +98,7 @@ class FlinkCreator(Creator):
                             'the deployment manager will supply one automatically. ' +
                             'Please see PNDA example-applications for usage.')
         else:
-            # new style applications that don't need to provide upstart.conf or yarn-kill.py
+            # new style applications that don't need to provide upstart.conf
             if 'component_main_jar' in properties and 'component_main_class' not in properties:
                 raise Exception('properties.json must contain "main_class" for %s flink %s' % (application_name, component['component_name']))
 
@@ -111,7 +111,7 @@ class FlinkCreator(Creator):
                 raise Exception('properties.json must contain "main_jar or main_py" for %s flink %s' % (application_name, component['component_name']))
 
             this_dir = os.path.dirname(os.path.realpath(__file__))
-            copy(os.path.join(this_dir, 'yarn-kill.py'), staged_component_path)
+            copy(os.path.join(this_dir, 'flink-cancel.py'), staged_component_path)
             if usesSystemd:
                 service_script = 'flink.systemd.service.tpl' if java_app else 'flink.systemd.service.py.tpl'
                 service_script_install_path = '/usr/lib/systemd/system/%s.service' % service_name
@@ -146,7 +146,7 @@ class FlinkCreator(Creator):
         self._fill_properties(os.path.join(staged_component_path, service_script), properties)
         self._fill_properties(os.path.join(staged_component_path, 'log4j.properties'), properties)
         self._fill_properties(os.path.join(staged_component_path, 'application.properties'), properties)
-        self._fill_properties(os.path.join(staged_component_path, 'yarn-kill.py'), properties)
+        self._fill_properties(os.path.join(staged_component_path, 'flink-cancel.py'), properties)
 
         mkdircommands = []
         mkdircommands.append('mkdir -p %s' % remote_component_tmp_path)
@@ -167,7 +167,7 @@ class FlinkCreator(Creator):
         commands = []
         commands.append('sudo cp %s/%s %s' % (remote_component_tmp_path, service_script, service_script_install_path))
         commands.append('sudo cp %s/* %s' % (remote_component_tmp_path, remote_component_install_path))
-        commands.append('sudo chmod a+x %s/yarn-kill.py' % (remote_component_install_path))
+        commands.append('sudo chmod a+x %s/flink-cancel.py' % (remote_component_install_path))
         if main_jar_name is not None:
             commands.append('cd %s && sudo jar uf %s application.properties' % (remote_component_install_path, main_jar_name))
         commands.append('sudo rm -rf %s' % (remote_component_tmp_path))
