@@ -2,19 +2,14 @@
 Name:       app.py
 Purpose:    Runs the webserver for the Deployment Manager REST API.
 Author:     PNDA team
-
 Created:    21/03/2016
-
 Copyright (c) 2016 Cisco and/or its affiliates.
-
 This software is licensed to you under the terms of the Apache License, Version 2.0 (the "License").
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
 The code, technical concepts, and all information contained herein, are the property of Cisco Technology, Inc.
 and/or its affiliated entities, under various laws including copyright, international treaties, patent,
 and/or contract. Any use of the material herein must be in accordance with the terms of the License.
 All rights not expressly granted by the License are reserved.
-
 Unless required by applicable law or agreed to separately in writing, software distributed under the
 License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 either express or implied.
@@ -37,7 +32,7 @@ import deployer_utils
 import application_summary_registrar
 import deployment_manager
 from deployer_system_test import DeployerRestClientTester
-from exceptiondef import NotFound, ConflictingState, FailedValidation, FailedCreation, FailedConnection
+from exceptiondef import NotFound, ConflictingState, FailedValidation, FailedCreation, FailedConnection, Forbidden
 from async_dispatcher import AsyncDispatcher
 from package_repo_rest_client import PackageRepoRestClient
 
@@ -52,6 +47,7 @@ class Application(tornado.web.Application):
             (r'/packages/(.*)/applications', PackageApplicationsHandler),
             (r'/packages/(.*)/status', PackageStatusHandler),
             (r'/packages/(.*)', PackageHandler),
+            (r'/applications/(.*)/(.*)/(.*)', ApplicationActionHandler),
             (r'/applications/(.*)/(.*)', ApplicationDetailHandler),
             (r'/applications/(.*)', ApplicationHandler),
             (r'/applications', ApplicationsHandler),
@@ -77,6 +73,10 @@ class BaseHandler(CorsMixin, tornado.web.RequestHandler):
             elif isinstance(ex, FailedValidation):
                 logging.info(ex.msg)
                 self.set_status(400)
+                self.finish(ex.msg)
+            elif isinstance(ex, Forbidden):
+                logging.info(ex.msg)
+                self.set_status(403)
                 self.finish(ex.msg)
             elif isinstance(ex, FailedCreation):
                 logging.info(ex.msg)
@@ -217,15 +217,61 @@ class ApplicationsHandler(BaseHandler):
         DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
 
 
+class ApplicationActionHandler(BaseHandler):
+    @asynchronous
+    def put(self, name, category, action):
+        try:
+            request_body = json.loads(self.request.body)
+        except ValueError:
+            self.send_client_error("Invalid request body")
+            return
+
+        user_name = self.get_argument("user")
+      
+        def do_call():
+            if category == 'savepoint' and action == 'dispose':
+                dm.flink_dispose_savepoint(name, request_body, user_name)
+                self.send_accepted()
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+    @asynchronous
+    def post(self, name, category, action):
+        user_name = self.get_argument("user")
+        def do_call():
+            if category == 'savepoint' and action == 'trigger':
+                dm.flink_trigger_savepoint(name, user_name)
+                self.send_accepted()
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+    @asynchronous
+    def get(self, name, category, action):
+        def do_call():
+            if category == 'action' and action == 'list':
+                self.send_result(dm.get_application_action_list(name))
+            elif category == 'savepoint' and action == 'list':
+                self.send_result(dm.get_flink_savepoints(name))
+            else:
+                self.send_client_error("%s)" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+
 class ApplicationDetailHandler(BaseHandler):
     @asynchronous
     def post(self, name, action):
+        user_name = self.get_argument("user")
         def do_call():
             if action == 'start':
-                dm.start_application(name)
+                dm.start_application(name, user_name)
                 self.send_accepted()
             elif action == 'stop':
-                dm.stop_application(name)
+                dm.stop_application(name, user_name)
                 self.send_accepted()
             else:
                 self.send_client_error("%s is not a valid action (start|stop)" % action)
@@ -264,11 +310,13 @@ class ApplicationHandler(BaseHandler):
             self.send_client_error("Invalid request body. Missing field 'package'")
             return
 
-        if 'user' not in request_body:
-            self.send_client_error("Invalid request body. Missing field 'user'")
+        if 'user' in request_body:
+            logging.info(self.request.body)
+            self.send_client_error("Invalid request body. User should be passed in URI")
             return
-
+        user_name = self.get_argument("user")
         def do_call():
+            request_body.update({'user': user_name})
             dm.create_application(request_body['package'], aname, request_body)
             self.send_accepted()
 
@@ -283,8 +331,9 @@ class ApplicationHandler(BaseHandler):
 
     @asynchronous
     def delete(self, name):
+        user_name = self.get_argument("user")
         def do_call():
-            dm.delete_application(name)
+            dm.delete_application(name, user_name)
             self.send_accepted()
 
         DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)

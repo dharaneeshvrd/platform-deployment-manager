@@ -1,0 +1,28 @@
+{
+  "flink_action_list": [
+    {
+      "id": "trigger",
+      "name": "Trigger Savepoint",
+      "description": "Triggers savepoint on Running application"
+    },
+    {
+      "id": "restore",
+      "name": "Restore Savepoint",
+      "description": "Restores application with input savepoint",
+      "input": {
+        "selection": "single",
+        "options": []
+      },
+      "warning": "Restarts application with input savepoint",
+      "data_required": [
+        "savepoints"
+      ]
+    },
+    {
+      "id": "list",
+      "name": "List Savepoint",
+      "description": "Lists savepoints triggered on the application"
+    }
+  ],
+  "sparkStreaming_action_list": []
+}

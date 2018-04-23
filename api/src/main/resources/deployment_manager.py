@@ -2,19 +2,14 @@
 Name:       deployment_manager.py
 Purpose:    Implements the packages API and applications API
 Author:     PNDA team
-
 Created:    21/03/2016
-
 Copyright (c) 2016 Cisco and/or its affiliates.
-
 This software is licensed to you under the terms of the Apache License, Version 2.0 (the "License").
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
 The code, technical concepts, and all information contained herein, are the property of Cisco Technology, Inc.
 and/or its affiliated entities, under various laws including copyright, international treaties, patent,
 and/or contract. Any use of the material herein must be in accordance with the terms of the License.
 All rights not expressly granted by the License are reserved.
-
 Unless required by applicable law or agreed to separately in writing, software distributed under the
 License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 either express or implied.
@@ -30,7 +25,7 @@ import traceback
 import requests
 
 import application_creator
-from exceptiondef import ConflictingState, NotFound
+from exceptiondef import ConflictingState, NotFound, Forbidden
 from package_parser import PackageParser
 from async_dispatcher import AsyncDispatcher
 from lifecycle_states import ApplicationState, PackageDeploymentState
@@ -268,7 +263,7 @@ class DeploymentManager(object):
         applications = self._application_registrar.list_applications()
         return applications
 
-    def _assert_application_status(self, application, required_status):
+    def _assert_application_status(self, application, required_status, user_name):
         app_info = self.get_application_info(application)
         status = app_info['status']
 
@@ -279,15 +274,22 @@ class DeploymentManager(object):
             else:
                 raise ConflictingState(json.dumps({'status': status}))
 
+        if status != ApplicationState.NOTCREATED:
+            created_user = app_info['overrides']['user']  
+            if user_name != created_user and user_name != self._config["admin_user"]:
+                information = '%s is not authorized' % user_name
+                raise Forbidden(json.dumps({'information': information}))
+
+
     def _assert_application_exists(self, application):
         status = self.get_application_info(application)['status']
         if status == ApplicationState.NOTCREATED:
             raise NotFound(json.dumps({'status': status}))
 
-    def start_application(self, application):
+    def start_application(self, application, user_name):
         logging.info('start_application')
         with self._lock:
-            self._assert_application_status(application, ApplicationState.CREATED)
+            self._assert_application_status(application, ApplicationState.CREATED, user_name)
             self._mark_starting(application)
 
         def do_work():
@@ -306,10 +308,10 @@ class DeploymentManager(object):
 
         self.dispatcher.run_as_asynch(task=do_work)
 
-    def stop_application(self, application):
+    def stop_application(self, application, user_name):
         logging.info('stop_application')
         with self._lock:
-            self._assert_application_status(application, ApplicationState.STARTED)
+            self._assert_application_status(application, ApplicationState.STARTED, user_name)
             self._mark_stopping(application)
 
         def do_work():
@@ -360,7 +362,7 @@ class DeploymentManager(object):
         package_data_path = None
 
         with self._lock:
-            self._assert_application_status(application, ApplicationState.NOTCREATED)
+            self._assert_application_status(application, ApplicationState.NOTCREATED, overrides['user'])
             self._assert_package_status(package, PackageDeploymentState.DEPLOYED)
             defaults = self.get_package_info(package)['defaults']
             package_data_path = self._package_registrar.get_package_data(package)
@@ -404,10 +406,10 @@ class DeploymentManager(object):
         # set the status:
         self._application_registrar.set_application_status(application, app_status, error_message)
 
-    def delete_application(self, application):
+    def delete_application(self, application, user_name):
         logging.info('delete_application')
         with self._lock:
-            self._assert_application_status(application, [ApplicationState.CREATED, ApplicationState.STARTED])
+            self._assert_application_status(application, [ApplicationState.CREATED, ApplicationState.STARTED], user_name)
             self._mark_destroying(application)
 
         def do_work():
@@ -455,3 +457,69 @@ class DeploymentManager(object):
                 callback_payload["data"][0]["information"] = information
             logging.debug(callback_payload)
             self.rest_client.post(callback_url, json=callback_payload)
+
+    def get_application_action_list(self, application):
+        logging.info("getting list of actions avilable with respect to application and it's type")
+        self._assert_application_exists(application)
+
+        (action_list, data_required, tmp_action_list) = ([], {}, [])
+        create_data = self._application_registrar.get_create_data(application)
+        with open('plugins/action_list.json', 'r') as f:
+            file_action_list = json.load(f)
+        for component_type in create_data:
+            tmp_action_list = file_action_list.get('%s_action_list' % component_type, [])
+            if tmp_action_list:
+                for action in tmp_action_list:
+                    for req_data in action.get('data_required', []):
+                        data_required[req_data] = self._application_registrar.get_specific_record(application, req_data)
+                action_list += self._application_creator.load_action_options(component_type, tmp_action_list, data_required)
+        return action_list
+
+    def flink_trigger_savepoint(self, application, user_name):
+        logging.info('Savepointing flink_streaming application')
+        self._assert_application_exists(application)
+
+        create_data = self._application_registrar.get_create_data(application)
+        if 'flink' not in create_data:
+            raise ConflictingState(json.dumps({'information': 'Action not compatible with application type'}))
+        self._assert_application_status(application, ApplicationState.STARTED, user_name)
+
+        def do_work():
+            savepoint_path = self._application_creator.flink_trigger_savepoint(application, create_data, user_name)
+            self._application_registrar.add_flink_savepoint_data(application, savepoint_path)
+
+        self.dispatcher.run_as_asynch(task=do_work)
+
+    def flink_dispose_savepoint(self, application, savepoint_path, user_name):
+        requested_savepoint_path = savepoint_path['path']
+        logging.info('Disposing %s on %s', requested_savepoint_path, application)
+        self._assert_application_exists(application)
+
+        create_data = self._application_registrar.get_create_data(application)
+        if 'flink' not in create_data:
+            raise ConflictingState(json.dumps({'information': 'Action not compatible with application type'}))
+        record = json.loads(self._application_registrar.get_specific_record(application, 'savepoints'))
+        is_savepoint_available = False
+        for savepoint in record:
+            if savepoint['path'] == requested_savepoint_path:
+                is_savepoint_available = True
+        if not is_savepoint_available:
+            information = 'savepoint %s is not available' % requested_savepoint_path 
+            raise NotFound(json.dumps({'information': information})) 
+
+        def do_work():
+            self._application_creator.remove_flink_savepoint(self._environment['flink_savepoint_dir'], requested_savepoint_path)
+            self._application_registrar.remove_flink_savepoint(application, record, requested_savepoint_path)
+
+        self.dispatcher.run_as_asynch(task=do_work)
+
+    def get_flink_savepoints(self, application):
+        logging.info('get_flink_savepoints')
+        self._assert_application_exists(application)
+
+        record = []
+        create_data = self._application_registrar.get_create_data(application)
+        if 'flink' not in create_data:
+            raise ConflictingState(json.dumps({'information': 'Action not compatible with application type'}))
+        record = json.loads(self._application_registrar.get_specific_record(application, 'savepoints'))
+        return record

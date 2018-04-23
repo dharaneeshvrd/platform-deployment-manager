@@ -273,7 +273,7 @@ class Creator(object):
         result = {}
         for component_name, component in components.iteritems():
             validation_errors = self.validate_component(component)
-            if validation_errors:
+            if len(validation_errors) > 0:
                 result[component_name] = validation_errors
         return result
 
@@ -331,3 +331,21 @@ class Creator(object):
                     if result is None or self._get_yarn_start_time(app) > self._get_yarn_start_time(result):
                         result = app
         return result
+
+    def get_flink_savepoint_data(self, application_name, create_data):
+        ret = {}
+        all_yarn_applications = self._get_yarn_applications()
+        if all_yarn_applications is not None:
+            for single_component_data in create_data:
+                app_info = self._find_yarn_app_info(all_yarn_applications, single_component_data['component_job_name'])
+                if app_info is not None:
+                    job_key = '%s-%s' % (self.get_component_type(), single_component_data['component_name'])
+                    ret[job_key] = {}
+                    try:
+                        url = '%s%s' % (app_info['trackingUrl'], 'jobs')
+                        result = requests.get(url, headers={'Accept': 'application/json'}).json()
+                        ret[job_key]['flink_job_id'] = result['jobs-running'][0]
+                        ret[job_key]['yarn_id'] = app_info['id']
+                    except:
+                        logging.info('Failed to query application list from %s', url)
+        return ret

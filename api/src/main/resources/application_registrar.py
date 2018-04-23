@@ -60,6 +60,30 @@ class HbaseApplicationRegistrar(object):
         logging.debug("Reading create data %s", application_name)
         return json.loads(self._read_from_db(application_name)['cf:create_data'])
 
+    def get_specific_record(self, application_name, record_name):
+        logging.debug("Getting %s record in %s", record_name, application_name)
+        return self._read_from_db(application_name).get('cf:%s' % record_name, None)
+
+    def add_flink_savepoint_data(self, application_name, savepoint_data):
+        logging.debug("Savepointing %s", application_name)
+        data = {}
+        app_data = self._read_from_db(application_name)
+        existing_savepoint_data = app_data.get("cf:savepoints", "")
+        if existing_savepoint_data:
+            new_savepoint_data = json.loads(existing_savepoint_data)
+            new_savepoint_data.append(savepoint_data)
+            data = {'cf:savepoints': json.dumps(new_savepoint_data)}
+        else:
+            data = {'cf:savepoints': json.dumps([savepoint_data])}
+        self._write_to_db(application_name, data)
+
+    def remove_flink_savepoint(self, application_name, exisiting_savepoint_data, requested_savepoint_path):
+        logging.debug("Disposing %s on %s", requested_savepoint_path, application_name)
+        for savepoint in exisiting_savepoint_data:
+            if savepoint['path'] == requested_savepoint_path:
+                exisiting_savepoint_data.remove(savepoint)
+        self._write_to_db(application_name, {'cf:savepoints': json.dumps(exisiting_savepoint_data)})
+
     def delete_application(self, application_name):
         logging.debug("Deleting %s", application_name)
         connection = happybase.Connection(self._hbase_host)
@@ -72,7 +96,7 @@ class HbaseApplicationRegistrar(object):
     def get_application(self, application_name):
         logging.debug("Reading %s", application_name)
         application_data = self._read_from_db(application_name)
-        if not application_data:
+        if len(application_data) == 0:
             return None
         return {'overrides': json.loads(application_data['cf:overrides']),
                 'defaults': json.loads(application_data['cf:defaults']),
@@ -84,7 +108,7 @@ class HbaseApplicationRegistrar(object):
     def application_exists(self, application_name):
         logging.debug("Checking %s", application_name)
         application_data = self._read_from_db(application_name)
-        if not application_data:
+        if len(application_data) == 0:
             return False
         # Note: this last line is problematic, as with the current API:
         # a "NOTCREATED" app can have an error state in the db

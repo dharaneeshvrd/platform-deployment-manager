@@ -2,19 +2,14 @@
 Name:       flink.py
 Purpose:    Submits flink batch/streaming jobs based on application package
 Author:     PNDA team
-
 Created:    02/03/2018
-
 Copyright (c) 2016 Cisco and/or its affiliates.
-
 This software is licensed to you under the terms of the Apache License, Version 2.0 (the "License").
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
 The code, technical concepts, and all information contained herein, are the property of Cisco Technology, Inc.
 and/or its affiliated entities, under various laws including copyright, international treaties, patent,
 and/or contract. Any use of the material herein must be in accordance with the terms of the License.
 All rights not expressly granted by the License are reserved.
-
 Unless required by applicable law or agreed to separately in writing, software distributed under the
 License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 either express or implied.
@@ -22,6 +17,7 @@ either express or implied.
 
 # pylint: disable=C0103
 
+import datetime
 import json
 import os
 import logging
@@ -43,6 +39,34 @@ class FlinkCreator(Common):
 
     def get_component_type(self):
         return 'flink'
+
+    def load_action_options(self, action_list, req_data):
+        ret_action_list = []
+        for action in action_list:
+            if 'input' in action:
+                if action['id'] == 'restore':
+                    if isinstance(req_data['savepoints'], str):
+                        for savepoint in json.loads(req_data['savepoints']):
+                            action['input']['options'].append(savepoint['path'])
+            ret_action_list.append(action)
+        return ret_action_list
+
+    def trigger_savepoint(self, application_name, savepoint_data, user_name):
+        logging.debug("triggering_savepint: %s", application_name)
+
+        ret = {}
+        key_file = self._environment['cluster_private_key']
+        root_user = self._environment['cluster_root_user']
+        target_host = 'localhost'
+        for single_component_name, single_component_data in savepoint_data.iteritems():
+            savepoint_cmd = 'sudo -u %s %s %s %s -yid %s' % (user_name, '/opt/pnda/flink-1.4.0/bin/flink', 'savepoint', single_component_data['flink_job_id'], single_component_data['yarn_id'])
+            output = deployer_utils.exec_ssh_get_ouput(target_host, root_user, key_file, [savepoint_cmd])
+            for line in output.split('\n'):
+                if 'Path:' in line:
+                    savepoint_path = line.split()[-1]
+                    ret["path"] = savepoint_path
+                    ret["created_time"] = str(datetime.datetime.now())
+        return ret
 
     def create_component(self, staged_component_path, application_name, user_name, component, properties):
         logging.debug("create_component: %s %s %s %s", application_name, user_name, json.dumps(component), properties)
@@ -82,7 +106,7 @@ class FlinkCreator(Common):
             raise Exception('properties.json must contain "main_jar or main_py" for %s flink %s' % (application_name, component['component_name']))
 
         this_dir = os.path.dirname(os.path.realpath(__file__))
-        copy(os.path.join(this_dir, 'yarn-kill.py'), staged_component_path)
+        copy(os.path.join(this_dir, 'flink-stop.py'), staged_component_path)
         if usesSystemd:
             service_script = 'flink.systemd.service.tpl' if java_app else 'flink.systemd.service.py.tpl'
             service_script_install_path = '/usr/lib/systemd/system/%s.service' % service_name
@@ -97,7 +121,7 @@ class FlinkCreator(Common):
 
         self._fill_properties(os.path.join(staged_component_path, service_script), properties)
         self._fill_properties(os.path.join(staged_component_path, 'application.properties'), properties)
-        self._fill_properties(os.path.join(staged_component_path, 'yarn-kill.py'), properties)
+        self._fill_properties(os.path.join(staged_component_path, 'flink-stop.py'), properties)
 
         mkdircommands = []
         mkdircommands.append('mkdir -p %s' % remote_component_tmp_path)
@@ -110,7 +134,7 @@ class FlinkCreator(Common):
         commands = []
         commands.append('sudo cp %s/%s %s' % (remote_component_tmp_path, service_script, service_script_install_path))
         commands.append('sudo cp %s/* %s' % (remote_component_tmp_path, remote_component_install_path))
-        commands.append('sudo chmod a+x %s/yarn-kill.py' % (remote_component_install_path))
+        commands.append('sudo chmod a+x %s/flink-stop.py' % (remote_component_install_path))
 
         if 'component_main_jar' in properties:
             commands.append('cd %s && sudo jar uf %s application.properties' % (remote_component_install_path, properties['component_main_jar']))
@@ -134,3 +158,4 @@ class FlinkCreator(Common):
         logging.debug("stop commands: %s", stop_commands)
 
         return {'ssh': undo_commands, 'start_cmds': start_commands, 'stop_cmds': stop_commands}
+
