@@ -23,7 +23,7 @@ class AppplicationSummaryRegistrarTests(unittest.TestCase):
         Testing Summary data ets posted to Hbase
         """
         registrar = HBaseAppplicationSummary('1.2.3.4')
-        registrar.post_to_hbase({'aname': {'aggregate_status': 'status', 'component-1': 'data'}})
+        registrar.post_to_hbase({'aname': {'aggregate_status': 'status', 'component-1': 'data'}}, 'aname')
         hbase_mock.return_value.table.return_value.put.assert_called_once_with('aname', \
         {'cf:component_data': json.dumps({'component-1': 'data'}), 'cf:aggregate_status': 'status'})
 
