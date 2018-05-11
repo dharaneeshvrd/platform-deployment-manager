@@ -1,0 +1,50 @@
+{
+  "flink_action_list": [
+    {
+      "id": "trigger",
+      "category": "savepoint",
+      "name": "Trigger Savepoint",
+      "description": "Triggers savepoint on Running application",
+      "method": "POST"
+    },
+    {
+      "id": "restore",
+      "category": "savepoint",
+      "name": "Restore Savepoint",
+      "description": "Restores application with input savepoint",
+      "input": {
+        "selection": "single",
+        "options": []
+      },
+      "warning": "Restarts application with input savepoint",
+      "data_required": [
+        "savepoints"
+      ],
+      "method": "PUT"
+    },
+    {
+      "id": "list",
+      "category": "savepoint",
+      "name": "List Savepoint",
+      "description": "Lists savepoints triggered on the application",
+      "method": "GET"
+    },
+    {
+    "id": "Dispose",
+    "category": "savepoint",
+    "name": "Dispose Savepoint",
+    "description": "Disposes savepoints triggered on the application",
+    "input": {
+        "selection": "single",
+        "options": []
+      },
+    "warning": "Dispose the selected savepoint",
+    "data_required": [
+        "savepoints"
+      ],
+    "method": "PUT"
+
+    }
+  ],
+  "sparkStreaming_action_list": []
+}

@@ -43,6 +43,65 @@ class FlinkCreator(Common):
     def get_component_type(self):
         return 'flink'
 
+    def load_action_options(self, action_list, req_data):
+        ret_action_list = []
+        for action in action_list:
+            data_required = action.get('data_required', [])
+            for data in data_required:
+                if data == 'savepoints' and req_data[data] != '':
+                    for savepoint in json.loads(req_data[data]):
+                        action['input']['options'].append(savepoint['path'])
+                action.pop('data_required')
+            ret_action_list.append(action)
+        return ret_action_list
+
+    def trigger_savepoint(self, application_name, savepoint_data, user_name):
+        logging.debug("triggering_savepint: %s", application_name)
+
+        ret = {}
+        key_file = self._environment['cluster_private_key']
+        root_user = self._environment['cluster_root_user']
+        target_host = 'localhost'
+        for single_component_name, single_component_data in savepoint_data.iteritems():
+            savepoint_cmd = 'sudo -u %s %s %s %s -yid %s' % (user_name, '/opt/pnda/flink-1.4.0/bin/flink', 'savepoint', single_component_data['flink_job_id'], single_component_data['yarn_id'])
+            output = deployer_utils.exec_ssh_get_ouput(target_host, root_user, key_file, [savepoint_cmd])
+            for line in output.split('\n'):
+                if 'Path:' in line:
+                    savepoint_path = line.split()[-1]
+                    ret["path"] = savepoint_path
+                    ret["created_time"] = str(datetime.datetime.now())
+        return ret
+
+    def restore_file_operation(self, service_script_path):
+        file = open(service_script_path, "r+")
+        file_contents = file.read()
+        file.seek(0)
+        file.truncate()
+        return file, file_contents
+
+    def restore_savepoint(self, application_name, create_data, savepoint_path, is_stopped):
+        for single_component_data in create_data:
+            if not is_stopped:
+                self.stop_component(application_name, single_component_data)
+            file, file_contents = self.restore_file_operation(single_component_data['ssh'][2].split()[-1])
+            for line in file_contents.split('\n'):
+                logging.info(line)
+                if 'ExecStart=' in line:
+                    line = line.split('flink run')
+                    line = '%s%s -s %s%s' % (line[0], 'flink run', savepoint_path, line[-1])
+                file.write('%s\n' % line)
+            file.close()
+            if not is_stopped:
+                self.start_component(application_name, single_component_data)
+        for single_component_data in create_data:
+            file, file_contents = self.restore_file_operation(single_component_data['ssh'][2].split()[-1])
+            for line in file_contents.split('\n'):
+                if 'ExecStart=' in line:
+                    line = line.split('-s %s' % savepoint_path)
+                    line = ''.join(line)
+                file.write('%s\n' % line)
+            file.close()
+
     def create_component(self, staged_component_path, application_name, user_name, component, properties):
         logging.debug("create_component: %s %s %s %s", application_name, user_name, json.dumps(component), properties)
         remote_component_tmp_path = '%s/%s/%s' % (

@@ -74,6 +74,8 @@ class DeploymentManager(object):
         self._package_progress = {}
         self._lock = threading.RLock()
         self._authorizer = authorizer_local.AuthorizerLocal()
+        with open('action-details.json') as f:
+            self._action_details = json.load(f)
 
         # load number of threads from config file:
         number_of_threads = self._config["deployer_thread_limit"]
@@ -558,3 +560,108 @@ class DeploymentManager(object):
                 callback_payload["data"][0]["information"] = information
             logging.debug(callback_payload)
             self.rest_client.post(callback_url, json=callback_payload)
+
+    def get_application_action_list(self, application, user_name):
+        logging.debug("getting list of actions avilable with respect to application and it's type")
+        self._assert_application_exists(application)
+        application_owner = self._get_application_owner(application)
+        self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.READ)
+
+        (action_list, data_required, tmp_action_list) = ([], {}, [])
+        create_data = self._application_registrar.get_create_data(application)
+        for component_type in create_data:
+            tmp_action_list = self._action_details.get('%s_action_list' % component_type, [])
+            if tmp_action_list:
+                for action in tmp_action_list:
+                    for req_data in action.get('data_required', []):
+                        data_required[req_data] = self._application_registrar.get_specific_record(application, req_data)
+                action_list += self._application_creator.load_action_options(component_type, tmp_action_list, data_required)
+        return action_list
+
+    def do_application_action(self, application, user_name, category, action, request_body=None):
+        self._assert_application_exists(application)
+        application_owner = self._get_application_owner(application)
+        self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.READ)
+        self._assert_application_action(application, category, action)
+        if category == "savepoint":
+            if action == "list":
+                return self.flink_list_savepoint(application)
+            if action == "trigger":
+                self.flink_trigger_savepoint(application, user_name)
+            if action == "restore":
+                self.flink_restore_savepoint(application, request_body)
+            if action == "dispose":
+                self.flink_dispose_savepoint(application, request_body)
+
+    def _assert_application_action(self, application, r_category, r_action):
+        is_validate_action = False
+        create_data = self._application_registrar.get_create_data(application)
+        for component in create_data:
+            component_name = '%s_action_list' % component
+            for action in self._action_details[component_name]:
+                if r_category == action['category'] and r_action == action['id']:
+                    is_validate_action = True
+        if not is_validate_action:
+            raise ConflictingState(json.dumps({'information': 'Action not compatible with application type'}))
+
+    def validate_savepoint(self, application, savepoint_path):
+        is_savepoint_available = False
+        record = json.loads(self._application_registrar.get_specific_record(application, 'savepoints'))
+        for savepoint in record:
+            if savepoint_path == savepoint['path']:
+                is_savepoint_available = True
+
+        if not is_savepoint_available:
+            information = 'savepoint %s is not available' % savepoint_path
+            raise NotFound(json.dumps({'information': information}))
+
+    def flink_list_savepoint(self, application):
+        logging.debug('get_flink_savepoints')
+        record = []
+        savepoint_data = self._application_registrar.get_specific_record(application, 'savepoints')
+        if savepoint_data:
+            record = json.loads(savepoint_data)
+        logging.info(record)
+        return record
+
+    def flink_trigger_savepoint(self, application, user_name):
+        logging.debug('Savepointing flink_streaming application')
+        self._assert_application_status(application, ApplicationState.STARTED)
+
+        def do_work():
+            create_data = self._application_registrar.get_create_data(application)
+            savepoint_path = self._application_creator.flink_trigger_savepoint(application, create_data, user_name)
+            self._application_registrar.add_flink_savepoint_data(application, savepoint_path)
+
+        self.dispatcher.run_as_asynch(task=do_work)
+
+    def flink_restore_savepoint(self, application, savepoint_path):
+        savepoint = savepoint_path['path']
+        logging.debug('Restoring savepoint %s to %s application', savepoint_path, application)
+        self._assert_application_status(application, [ApplicationState.CREATED, ApplicationState.STARTED])
+        self.validate_savepoint(application, savepoint)
+
+        def do_work():
+            status = self.get_application_info(application)['status']
+            is_stopped = False
+            if status == ApplicationState.CREATED:
+                is_stopped = True
+            create_data = self._application_registrar.get_create_data(application)
+            self._application_creator.flink_restore_savepoint(application, create_data, savepoint, is_stopped)
+            if is_stopped:
+                self.start_application(application, user_name)
+
+        self.dispatcher.run_as_asynch(task=do_work)
+
+    def flink_dispose_savepoint(self, application, savepoint_path):
+        savepoint = savepoint_path['path']
+        logging.debug('Disposing %s on %s', savepoint, application)
+        self._assert_application_status(application, [ApplicationState.CREATED, ApplicationState.STARTED])
+        self.validate_savepoint(application, savepoint)
+
+        def do_work():
+            self._application_creator.remove_flink_savepoint(self._environment['flink_savepoint_dir'], savepoint)
+            self._application_registrar.remove_flink_savepoint(application, savepoint)
+
+        self.dispatcher.run_as_asynch(task=do_work)
+

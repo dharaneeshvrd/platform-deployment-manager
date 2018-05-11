@@ -143,3 +143,31 @@ class HbaseApplicationRegistrar(object):
             table.put(key, data)
         finally:
             connection.close()
+
+    def get_specific_record(self, application_name, record_name):
+        logging.debug("Getting %s record in %s", record_name, application_name)
+        return self._read_from_db(application_name).get('cf:%s' % record_name, "")
+
+    def add_flink_savepoint_data(self, application_name, savepoint_data):
+        logging.debug("Savepointing %s", application_name)
+        data = {}
+        app_data = self._read_from_db(application_name)
+        existing_savepoint_data = app_data.get("cf:savepoints", "")
+        if existing_savepoint_data:
+            new_savepoint_data = json.loads(existing_savepoint_data)
+            new_savepoint_data.append(savepoint_data)
+            data = {'cf:savepoints': json.dumps(new_savepoint_data)}
+        else:
+            data = {'cf:savepoints': json.dumps([savepoint_data])}
+        self._write_to_db(application_name, data)
+
+    def remove_flink_savepoint(self, application_name, requested_savepoint_path):
+        logging.debug("Disposing %s on %s", requested_savepoint_path, application_name)
+        app_data = self._read_from_db(application_name)
+        existing_savepoint_data = json.loads(app_data.get("cf:savepoints"))
+        for savepoint in existing_savepoint_data:
+            if savepoint['path'] == requested_savepoint_path:
+                existing_savepoint_data.remove(savepoint)
+        self._write_to_db(application_name, {'cf:savepoints': json.dumps(existing_savepoint_data)})
+
+
