@@ -32,6 +32,7 @@ import pwd
 import requests
 
 import application_creator
+import application_action_handler
 import authorizer_local
 from exceptiondef import ConflictingState, NotFound, Forbidden
 from package_parser import PackageParser
@@ -59,6 +60,7 @@ class Actions(object):
     STOP = "stop"
     DESTROY = "destroy"
     READ = "read"
+    OPERATIONS = "operations"
 
 class DeploymentManager(object):
     def __init__(self, repository, package_registrar, application_registrar, application_summary_registrar, environment, config):
@@ -81,6 +83,10 @@ class DeploymentManager(object):
         assert number_of_threads > 0
         self.dispatcher = AsyncDispatcher(num_threads=number_of_threads)
         self.rest_client = requests
+
+        with open('action-details.json') as f:
+            self._action_details = json.load(f)
+        self._action_handler = application_action_handler.ActionHandler(application_registrar, self._application_creator, environment, self.dispatcher)
 
     def _get_groups(self, user):
         groups = []
@@ -518,6 +524,7 @@ class DeploymentManager(object):
                 self._state_change_event_application(application)
                 try:
                     create_data = self._application_registrar.get_create_data(application)
+                    self._action_handler.delete_action_data(application, create_data)
                     self._application_creator.destroy_application(application, create_data)
                     self._application_registrar.delete_application(application)
                 except Exception as ex:
@@ -558,3 +565,40 @@ class DeploymentManager(object):
                 callback_payload["data"][0]["information"] = information
             logging.debug(callback_payload)
             self.rest_client.post(callback_url, json=callback_payload)
+
+    def get_action_list(self, application, user_name):
+        application_owner = self._get_application_owner(application)
+        self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.READ)
+
+        create_data = self._application_registrar.get_create_data(application)
+        action_list = []
+        for component in create_data:
+            action_list += self._action_handler.get_action_list(application, component)
+        return action_list
+
+    def do_application_action(self, application, user_name, category, action, request_body=None):
+        logging.info('%s requested on applicaion %s', action, application)
+
+        self._assert_application_exists(application)
+        application_owner = self._get_application_owner(application)
+        self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.OPERATIONS)
+        component_name = self._assert_application_action(application, category, action)
+        return self._action_handler.do_action(application, user_name, component_name, category, action, request_body)
+
+    def _assert_application_action(self, application, r_category, r_action):
+        is_validate_action = False
+        ret_component_name = ''
+        create_data = self._application_registrar.get_create_data(application)
+        for component in create_data:
+            component_name = '%s_action_list' % component
+            for action in self._action_details[component_name]:
+                if r_category == action['category'] and r_action == action['id']:
+                    is_validate_action = True
+                    req_app_state = action['required'].get('app_state', [])
+                    if req_app_state:
+                        self._assert_application_status(application, req_app_state)
+                    ret_component_name = component
+                        
+        if not is_validate_action:
+            raise ConflictingState(json.dumps({'information': 'Action not compatible with application type'}))
+        return ret_component_name

@@ -52,6 +52,7 @@ class Application(tornado.web.Application):
             (r'/packages/(.*)/applications', PackageApplicationsHandler),
             (r'/packages/(.*)/status', PackageStatusHandler),
             (r'/packages/(.*)', PackageHandler),
+            (r'/applications/(.*)/(.*)/(.*)', ApplicationActionHandler),
             (r'/applications/(.*)/(.*)', ApplicationDetailHandler),
             (r'/applications/(.*)', ApplicationHandler),
             (r'/applications', ApplicationsHandler),
@@ -298,19 +299,85 @@ class ApplicationHandler(BaseHandler):
 
         DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
 
+class ApplicationActionHandler(BaseHandler):
+    @asynchronous
+    def put(self, name, category, action):
+        try:
+            request_body = json.loads(self.request.body)
+        except ValueError:
+            self.send_client_error("Invalid request body")
+            return
+
+        user_name = self.get_argument("user.name")
+        def do_call():
+            if category in action_list and action in action_list[category]:
+                dm.do_application_action(name, user_name, category, action, request_body)
+                self.send_accepted()
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+    @asynchronous
+    def post(self, name, category, action):
+        user_name = self.get_argument("user.name")
+        def do_call():
+            if category in action_list and action in action_list[category]:
+                dm.do_application_action(name, user_name, category, action)
+                self.send_accepted()
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+    @asynchronous
+    def get(self, name, category, action):
+        def do_call():
+            if category == 'action' and action == 'list':
+                self.send_result(dm.get_action_list(name, self.get_argument("user.name", default='')))
+            elif category in action_list and action in action_list[category]:
+                user_name = self.get_argument("user.name")
+                self.send_result(dm.do_application_action(name, user_name, category, action))
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
+    @asynchronous
+    def delete(self, name, category, action):
+        try:
+            request_body = json.loads(self.request.body)
+        except ValueError:
+            self.send_client_error("Invalid request body")
+            return
+
+        user_name = self.get_argument("user.name")
+        def do_call():
+            if category in action_list and action in action_list[category]:
+                dm.do_application_action(name, user_name, category, action, request_body)
+                self.send_accepted()
+            else:
+                self.send_client_error("%s is not a valid action" % action)
+
+        DISPATCHER.run_as_asynch(task=do_call, on_error=self.handle_error)
+
 
 # pylint: disable=C0103
 # pylint: disable=W0603
 config = None
 dm = None
+action_list = None
 
 
 def main():
     global config
     global dm
+    global action_list
 
     with open('dm-config.json', 'r') as f:
         config = json.load(f)
+
+    action_list = deployer_utils.load_action_list()
 
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                         level=logging.getLevelName(config['config']['log_level']),

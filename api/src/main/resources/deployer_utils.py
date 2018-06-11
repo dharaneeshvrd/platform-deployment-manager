@@ -20,6 +20,7 @@ License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF 
 either express or implied.
 """
 
+import json
 import os
 import tarfile
 import StringIO
@@ -435,3 +436,36 @@ def dict_to_xml(dict_props):
                       '</property>'
     xml_string += '</configuration>'
     return xml_header + xml_string
+
+def exec_ssh_out(host, user, key, ssh_commands):
+    result = ''
+    shell = spur.SshShell(
+        hostname=host,
+        username=user,
+        private_key_file=key,
+        missing_host_key=spur.ssh.MissingHostKey.accept)
+    with shell:
+        for ssh_command in ssh_commands:
+            logging.debug('Host - %s: Command - %s', host, ssh_command)
+            try:
+                result = shell.run(["bash", "-c", ssh_command]).output
+            except spur.results.RunProcessError as exception:
+                logging.error(
+                    ssh_command +
+                    " - error: " +
+                    traceback.format_exc(exception))
+    return result
+
+def load_action_list():
+    ret = {}
+
+    with open('action-details.json') as f:
+        action_details = json.load(f)
+
+    for _, component_actions in action_details.iteritems():
+        for action in component_actions:
+            if action['category'] not in ret:
+                ret.update({action['category']:[]})
+            ret[action['category']].append(action['id'])
+
+    return ret

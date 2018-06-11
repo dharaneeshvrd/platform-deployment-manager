@@ -187,3 +187,28 @@ class ApplicationCreator(object):
         stage_path = "%s/%s" % (self._config['stage_root'], uuid.uuid4())
         tar.extractall(path=stage_path)
         return stage_path
+
+    def flink_trigger_savepoint(self, application_name, application_create_data, user_name):
+
+        logging.debug("savepointing flink_streaming application: %s %s", application_name, application_create_data)
+
+        for component_type, component_create_data in application_create_data.iteritems():
+            creator = self._load_creator(component_type)
+            flink_data = creator.get_flink_savepoint_data(application_name, component_create_data)
+            savepoint_path = creator.trigger_savepoint(application_name, flink_data, user_name)
+        return savepoint_path
+
+    def flink_remove_savepoint(self, savepoints):
+        logging.debug('Deleting %s', savepoints)
+
+        for savepoint in savepoints:
+            savepoint = savepoint.split('8020')[-1]
+            self._hdfs_client.remove(savepoint, recursive=True)
+
+    def flink_restore_savepoint(self, application_name, application_create_data, savepoint_path, is_stopped):
+
+        logging.debug("restoring flink_streaming application %s to savepoint %s", application_name, savepoint_path)
+
+        for component_type, component_create_data in application_create_data.iteritems():
+            creator = self._load_creator(component_type)
+            creator.restore_savepoint(application_name, component_create_data, savepoint_path, is_stopped)
