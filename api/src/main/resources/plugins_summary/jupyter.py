@@ -6,4 +6,4 @@ class JupyterComponentSummary(ComponentSummary):
         return 'jupyter'
 
     def get_component_summary(self, component, application):
-        return {}
+        return {"aggregate_status": "CREATED"}

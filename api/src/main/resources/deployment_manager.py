@@ -61,7 +61,7 @@ class Actions(object):
     READ = "read"
 
 class DeploymentManager(object):
-    def __init__(self, repository, package_registrar, application_registrar, application_summary_registrar, environment, config):
+    def __init__(self, repository, package_registrar, application_registrar, application_summary_registrar, application_detailed_summary, environment, config):
         self._repository = repository
         self._package_registrar = package_registrar
         self._application_registrar = application_registrar
@@ -69,6 +69,7 @@ class DeploymentManager(object):
         self._config = config
         self._application_creator = application_creator.ApplicationCreator(config, environment,
                                                                            environment['namespace'])
+        self._application_detailed_summary = application_detailed_summary
         self._application_summary_registrar = application_summary_registrar
         self._package_parser = PackageParser()
         self._package_progress = {}
@@ -81,6 +82,7 @@ class DeploymentManager(object):
         assert number_of_threads > 0
         self.dispatcher = AsyncDispatcher(num_threads=number_of_threads)
         self.rest_client = requests
+        self._idle_states = [ApplicationState.CREATED, ApplicationState.STOPPED, ApplicationState.FAILED, ApplicationState.KILLED, ApplicationState.COMPLETED]
 
     def _get_groups(self, user):
         groups = []
@@ -331,6 +333,7 @@ class DeploymentManager(object):
         self._set_package_progress(package, ApplicationState.CREATING)
 
     def _mark_starting(self, package):
+        self._application_registrar.set_application_status(package, ApplicationState.STARTING)
         self._set_package_progress(package, ApplicationState.STARTING)
 
     def _mark_stopping(self, package):
@@ -371,7 +374,7 @@ class DeploymentManager(object):
     def start_application(self, application, user_name):
         logging.info('start_application')
         with self._lock:
-            self._assert_application_status(application, ApplicationState.CREATED)
+            self._assert_application_status(application, self._idle_states)
             application_owner = self._get_application_owner(application)
             self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.START)
             self._mark_starting(application)
@@ -381,8 +384,12 @@ class DeploymentManager(object):
                 self._state_change_event_application(application)
                 try:
                     create_data = self._application_registrar.get_create_data(application)
-                    self._application_creator.start_application(application, create_data)
-                    self._application_registrar.set_application_status(application, ApplicationState.STARTED)
+                    is_pre_processed = self._application_creator.start_application(application, create_data)
+                    if is_pre_processed:
+                        self._application_registrar.set_create_data(application, create_data)
+                    summary_status = self._application_detailed_summary.generate_detailed_summary(application, ApplicationState.STARTED)
+                    logging.info("Generated summary status: %s", summary_status)
+                    self._application_registrar.set_application_status(application, summary_status)
                 except Exception as ex:
                     self._handle_application_error(application, ex, ApplicationState.CREATED, "starting")
                     raise
@@ -406,7 +413,9 @@ class DeploymentManager(object):
                 try:
                     create_data = self._application_registrar.get_create_data(application)
                     self._application_creator.stop_application(application, create_data)
-                    self._application_registrar.set_application_status(application, ApplicationState.CREATED)
+                    summary_status = self._application_detailed_summary.generate_detailed_summary(application, ApplicationState.STOPPED)
+                    logging.info("Generated summary status: %s", summary_status)
+                    self._application_registrar.set_application_status(application, summary_status)
                 except Exception as ex:
                     self._handle_application_error(application, ex, ApplicationState.STARTED, "stopping")
                     raise
@@ -509,7 +518,7 @@ class DeploymentManager(object):
     def delete_application(self, application, user_name):
         logging.info('delete_application')
         with self._lock:
-            self._assert_application_status(application, [ApplicationState.CREATED, ApplicationState.STARTED])
+            self._assert_application_status(application, self._idle_states+[ApplicationState.STARTED])
             application_owner = self._get_application_owner(application)
             self._authorize(user_name, Resources.APPLICATION, application_owner, Actions.DESTROY)
             self._mark_destroying(application)

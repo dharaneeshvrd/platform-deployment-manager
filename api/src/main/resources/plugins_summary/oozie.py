@@ -1,4 +1,5 @@
 import json
+import logging
 import requests
 
 from plugins_summary.component_summary import ComponentSummary
@@ -19,8 +20,12 @@ class OozieComponentSummary(ComponentSummary):
             name = 'appName'
             oozie_id = 'id'
 
-        if data['status'] == 'PREP' or data['status'] == 'PREPSUSPENDED':
+        if (data['status'] == 'PREPSUSPENDED' and name == 'coordJobName') or\
+           (data['status'] == 'PREP' and name == 'appName'):
             ret_data.update({'aggregate_status': "CREATED", \
+                'oozieId': data[oozie_id], 'name': data[name]})
+        elif data['status'] == 'PREP' and name == 'coordJobName':
+            ret_data.update({'aggregate_status': "STARTING", \
                 'oozieId': data[oozie_id], 'name': data[name]})
         elif data['status'] == 'RUNNING':
             oozie_data = self._oozie_action_handler(data['actions'])
@@ -50,6 +55,9 @@ class OozieComponentSummary(ComponentSummary):
             aggregate_status = self._process_data(oozie_data)
             ret_data.update({'actions': oozie_data, 'aggregate_status': 'COMPLETED_WITH_FAILURES', \
                 'oozieId': data[oozie_id], 'name': data[name], 'status': aggregate_status})
+        else:
+            logging.debug("New state: %s", data['status'])
+
         ret_data.update({"componentType": "Oozie"})
         return ret_data
 
@@ -115,7 +123,7 @@ class OozieComponentSummary(ComponentSummary):
             if data[ele]['status'] == 'WARN':
                 warn_count += 1
 
-        if error_count == action_count:
+        if error_count == action_count and action_count != 0:
             status = self.component_status['red']
         elif error_count >= 1 or warn_count >= 1:
             status = self.component_status['amber']

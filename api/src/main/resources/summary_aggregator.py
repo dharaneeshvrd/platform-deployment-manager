@@ -15,7 +15,7 @@ class ComponentSummaryAggregator(object):
         aggregated_status_priority = dict([(1, 'CREATED'), \
         (2, 'STARTING'), (3, "RUNNING"), (4, 'RUNNING_WITH_ERRORS'), \
         (5, 'STOPPED'), (6, 'STOPPED_WITH_FAILURES'), (7, 'KILLED'), (8, 'KILLED_WITH_FAILURES'), \
-        (9, 'FAILED'), (10, 'COMPLETED'), (11, 'COMPLETED_WITH_FAILURES'), (12, 'NOT_FOUND')])
+        (9, 'COMPLETED'), (10, 'COMPLETED_WITH_FAILURES'), (11, 'NOT_FOUND')])
         current_agg_status_priority = 0
 
         for component in application:
@@ -32,7 +32,7 @@ class ComponentSummaryAggregator(object):
         if temp_comp_status == 'CREATED':
             temp_status_priority = 1
         elif temp_comp_status == 'STARTING' or temp_comp_status == 'SUBMITTED' \
-                or temp_comp_status == 'ACCEPTED':
+                or temp_comp_status == 'ACCEPTED' or temp_comp_status == 'SUBMITTING_TO_YARN':
             temp_status_priority = 2
         elif temp_comp_status == 'RUNNING':
             temp_status_priority = 3
@@ -46,13 +46,11 @@ class ComponentSummaryAggregator(object):
             temp_status_priority = 7
         elif temp_comp_status == 'KILLED_WITH_FAILURES':
             temp_status_priority = 8
-        elif temp_comp_status == 'FAILED':
-            temp_status_priority = 9
         elif temp_comp_status == 'COMPLETED' or temp_comp_status == 'FINISHED_SUCCEEDED' \
                 or temp_comp_status == 'SUCCEEDED':
+            temp_status_priority = 9
+        elif temp_comp_status == 'COMPLETED_WITH_FAILURES' or temp_comp_status == 'FINISHED_FAILED' or temp_comp_status == "FAILED":
             temp_status_priority = 10
-        elif temp_comp_status == 'COMPLETED_WITH_FAILURES' or temp_comp_status == 'FINISHED_FAILED':
-            temp_status_priority = 11
         else:
-            temp_status_priority = 12
+            temp_status_priority = 11
         return temp_status_priority

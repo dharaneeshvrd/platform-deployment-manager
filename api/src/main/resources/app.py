@@ -36,6 +36,7 @@ import application_registrar
 import deployer_utils
 import application_summary_registrar
 import deployment_manager
+from application_detailed_summary import ApplicationDetailedSummary
 from deployer_system_test import DeployerRestClientTester
 from exceptiondef import NotFound, ConflictingState, FailedValidation, FailedCreation, FailedConnection, Forbidden
 from async_dispatcher import AsyncDispatcher
@@ -335,6 +336,7 @@ def main():
                                                   config['environment']['hbase_thrift_server']),
                                               application_summary_registrar.HBaseAppplicationSummary(
                                                   config['environment']['hbase_thrift_server']),
+                                              ApplicationDetailedSummary(config['environment'], config['config']),
                                               config['environment'],
                                               config['config'])
 

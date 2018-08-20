@@ -87,6 +87,7 @@ class SparkStreamingCreator(Common):
 
             this_dir = os.path.dirname(os.path.realpath(__file__))
             copy(os.path.join(this_dir, 'yarn-kill.py'), staged_component_path)
+            copy(os.path.join(this_dir, 'systemd.cfg'), staged_component_path)
             service_script = 'systemd.service.tpl' if java_app else 'systemd.service.py.tpl'
             service_script_install_path = '/usr/lib/systemd/system/%s.service' % service_name
             if 'component_respawn_type' not in properties:
@@ -94,11 +95,12 @@ class SparkStreamingCreator(Common):
             if 'component_respawn_timeout_sec' not in properties:
                 properties['component_respawn_timeout_sec'] = '2'
             copy(os.path.join(this_dir, service_script), staged_component_path)
+            properties['environment_file_path'] = '%s/%s' % (remote_component_install_path, 'systemd.cfg')
 
         self._fill_properties(os.path.join(staged_component_path, service_script), properties)
+        self._fill_properties(os.path.join(staged_component_path, 'systemd.cfg'), properties)
         self._fill_properties(os.path.join(staged_component_path, 'log4j.properties'), properties)
         self._fill_properties(os.path.join(staged_component_path, 'application.properties'), properties)
-        self._fill_properties(os.path.join(staged_component_path, 'yarn-kill.py'), properties)
 
         mkdircommands = []
         mkdircommands.append('mkdir -p %s' % remote_component_tmp_path)
@@ -140,4 +142,5 @@ class SparkStreamingCreator(Common):
         stop_commands.append('sudo service %s stop\n' % service_name)
         logging.debug("stop commands: %s", stop_commands)
 
-        return {'ssh': undo_commands, 'start_cmds': start_commands, 'stop_cmds': stop_commands}
+        return {'ssh': undo_commands, 'start_cmds': start_commands, 'stop_cmds': stop_commands, \
+                'systemd_environment_file_path': properties['environment_file_path']}

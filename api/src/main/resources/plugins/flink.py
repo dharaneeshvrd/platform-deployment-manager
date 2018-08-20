@@ -95,8 +95,11 @@ class FlinkCreator(Common):
                 properties['component_respawn_timeout_sec'] = '2'
 
         copy(os.path.join(this_dir, service_script), staged_component_path)
+        copy(os.path.join(this_dir, 'systemd.cfg'), staged_component_path)
+        properties['environment_file_path'] = '%s/%s' % (remote_component_install_path, 'systemd.cfg')
 
         self._fill_properties(os.path.join(staged_component_path, service_script), properties)
+        self._fill_properties(os.path.join(staged_component_path, 'systemd.cfg'), properties)
         self._fill_properties(os.path.join(staged_component_path, 'application.properties'), properties)
         self._fill_properties(os.path.join(staged_component_path, 'flink-stop.py'), properties)
 
@@ -133,4 +136,5 @@ class FlinkCreator(Common):
         stop_commands.append('sudo service %s stop\n' % service_name)
         logging.debug("stop commands: %s", stop_commands)
 
-        return {'ssh': undo_commands, 'start_cmds': start_commands, 'stop_cmds': stop_commands}
+        return {'ssh': undo_commands, 'start_cmds': start_commands, 'stop_cmds': stop_commands, \
+                'systemd_environment_file_path': properties['environment_file_path']}

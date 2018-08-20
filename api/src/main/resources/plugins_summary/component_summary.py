@@ -28,10 +28,7 @@ class ComponentSummary(object):
         (aggregate_status, yarnid, tracking_url, information) = ('', '', '', '')
         yarn_data = self._yarn_connection.check_in_yarn(job_name)
         if dm_status == 'CREATED':
-            if yarn_data != None:
-                aggregate_status, yarnid, tracking_url, information = self.yarn_handler(yarn_data, application)
-            else:
-                aggregate_status = "CREATED"
+            aggregate_status = "CREATED"
         else:
             if yarn_data != None:
                 aggregate_status, yarnid, tracking_url, information = self.yarn_handler(yarn_data, application)
@@ -69,4 +66,4 @@ class ComponentSummary(object):
         else:
             message = '%s. %s' % (message, more_detail)
 
-        return 'FAILED_TO_SUBMIT_TO_YARN', message
+        return 'SUBMITTING_TO_YARN', message

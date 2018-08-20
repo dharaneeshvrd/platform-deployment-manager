@@ -36,10 +36,12 @@ import logging
 import json
 import string
 import collections
+import time
 import requests
 import hbase_descriptor
 import opentsdb_descriptor
 from deployer_utils import HDFS
+
 
 
 class Creator(object):
@@ -154,6 +156,35 @@ class Creator(object):
         '''
         pass
 
+    def pre_process_component(self, application_name, create_data):
+        '''
+        pre-processing the component before starting the application
+        sparkStreaming and flink component's job name will get ensured to be unique before starting the application
+
+        application_name - name of the application
+        create_data - as per above explanation, the data returned from the
+                      corresponding create operation, which should be
+                      sufficient to do pre processing on the component.
+        '''
+        pass
+
+    def milli_time(self):
+        return int(round(time.time() * 1000))
+
+    def generate_component_job_name(self, app_name, component_name):
+        return "%s-%s-job-%d" % (app_name, component_name, self.milli_time())
+
+    def pre_process_components(self, app_name, create_data):
+        """
+        pre-processing the component data before starting the application
+        """
+        is_pre_processed = False
+        for single_component_data in create_data:
+            if self.pre_process_component(app_name, single_component_data):
+                is_pre_processed = True
+
+        return is_pre_processed
+
     def _instantiate_properties(self, application_name, user_name, component, property_overrides):
         logging.debug(
             "_instantiate_properties %s %s",
@@ -174,7 +205,7 @@ class Creator(object):
 
         props['component_application'] = application_name
         props['component_name'] = component['component_name']
-        props['component_job_name'] = '%s-%s-job' % (props['component_application'], props['component_name'])
+        props['component_job_name'] = self.generate_component_job_name(props['component_application'], props['component_name'])
         props['application_hdfs_root'] = '/pnda/system/deployment-manager/applications/%s/%s' % (user_name, application_name)
         props['component_hdfs_root'] = '%s/%s' % (props['application_hdfs_root'], component['component_name'])
         props['application_user'] = user_name
@@ -184,6 +215,7 @@ class Creator(object):
         with open(local_file, "r") as myfile:
             file_contents = myfile.read()
 
+        # In systemd templates, property names beginning with 'dynamic' will get loaded from environment file
         new_file_contents = string.Template(
             file_contents).safe_substitute(props)
 

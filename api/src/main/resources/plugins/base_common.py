@@ -22,6 +22,7 @@ either express or implied.
 
 # pylint: disable=C0103
 
+import ConfigParser
 import json
 import logging
 import deployer_utils
@@ -47,3 +48,22 @@ class Common(Creator):
         root_user = self._environment['cluster_root_user']
         target_host = 'localhost'
         deployer_utils.exec_ssh(target_host, root_user, key_file, cmds)
+
+    def pre_process_component(self, application_name, create_data):
+        is_pre_processed = False
+        all_apps = self._get_yarn_applications()
+
+        # ensuring job name is unique
+        if self._find_yarn_app_info(all_apps, create_data['component_job_name']) is not None:
+            new_job_name = self.generate_component_job_name(application_name, create_data['component_name'])
+            config_file = create_data['systemd_environment_file_path']
+            config = ConfigParser.RawConfigParser()
+            config.read(config_file)
+            config.set('config', 'dynamic_component_job_name', new_job_name)
+
+            with open(config_file, 'wb') as f:
+                config.write(f)
+            create_data['component_job_name'] = new_job_name
+            is_pre_processed = True
+
+        return is_pre_processed

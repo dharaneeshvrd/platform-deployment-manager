@@ -105,10 +105,14 @@ class ApplicationCreator(object):
     def start_application(self, application_name, application_create_data):
 
         logging.debug("start_application: %s %s", application_name, application_create_data)
+        is_pre_processed = bool()
 
         for component_type, component_create_data in application_create_data.iteritems():
             creator = self._load_creator(component_type)
+            is_pre_processed = creator.pre_process_components(application_name, component_create_data)
             creator.start_components(application_name, component_create_data)
+
+        return is_pre_processed
 
     def stop_application(self, application_name, application_create_data):
 

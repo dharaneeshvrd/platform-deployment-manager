@@ -86,6 +86,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                                                 {"status": status, "information": info, 'overrides':{'user':'username'}})
         self.mock_application_registar = mock_application_registar
         self.mock_summary_registar = Mock()
+        self.mock_detailed_summary = Mock()
 
         self.test_package_name = "aPakageForTesting-1.0.0"
         self.test_app_name = "anAppForTesting"
@@ -280,6 +281,7 @@ class DeploymentManagerTest(unittest.TestCase):
             package_registrar=self.mock_package_registar,
             application_registrar=self.mock_application_registar,
             application_summary_registrar=self.mock_summary_registar,
+            application_detailed_summary=self.mock_detailed_summary,
             environment=self.mock_environment,
             config=self.mock_config)
 
@@ -445,6 +447,7 @@ class DeploymentManagerTest(unittest.TestCase):
             return_value=None
         )
 
+        self.mock_detailed_summary.generate_detailed_summary = Mock(return_value="STOPPED")
         application_callback_name = "application_callback"
         self.mock_config[application_callback_name] = application_callback_name
 
@@ -462,7 +465,7 @@ class DeploymentManagerTest(unittest.TestCase):
         on_complete = Event()
         # holds the result of the test, false if test has not finished yet:
         test_result = [None]
-        on_rest_callback = self._create_rest_callback_verifier(expected_statuses=["STOPPING", "CREATED"],
+        on_rest_callback = self._create_rest_callback_verifier(expected_statuses=["STOPPING", "STOPPED"],
                                                                on_complete=on_complete, test_result=test_result)
         deployment_manager.rest_client.post = on_rest_callback
 
@@ -473,7 +476,7 @@ class DeploymentManagerTest(unittest.TestCase):
         on_complete.wait(5)
         self.assertIsNotNone(test_result[0], "async task completed")
         info = test_result[0]
-        self.assertEquals(info.get("data")[0]["state"], "CREATED")
+        self.assertEquals(info.get("data")[0]["state"], "STOPPED")
 
     def _create_rest_callback_verifier(self, expected_statuses, on_complete, test_result):
         """
@@ -605,6 +608,7 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar = Mock()
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -612,6 +616,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -626,6 +631,7 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar.list_packages.return_value = expected_packages
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -633,6 +639,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -660,6 +667,7 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar = Mock()
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -667,6 +675,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -680,6 +689,7 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar.package_exists.return_value = False
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -687,6 +697,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -707,6 +718,7 @@ class DeploymentManagerTest(unittest.TestCase):
         application_registrar = Mock()
         application_registrar.list_applications_for_package.return_value = expected_applications
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -714,6 +726,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -728,6 +741,7 @@ class DeploymentManagerTest(unittest.TestCase):
         application_registrar = Mock()
         application_registrar.list_applications.return_value = expected_applications
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -735,6 +749,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -753,6 +768,7 @@ class DeploymentManagerTest(unittest.TestCase):
             'status': ApplicationState.STARTING,
             'information': None}
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -760,6 +776,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -771,6 +788,7 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar = Mock()
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         package_registrar.package_exists.return_value = True
         package_registrar.get_package_metadata.return_value = {
             'metadata': {'user': 'username'}
@@ -786,6 +804,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                        package_registrar,
                                        application_registrar,
                                        application_summary_registrar,
+                                       application_detailed_summary,
                                        environment,
                                        config)
         dmgr.set_package_progress("name", PackageDeploymentState.DEPLOYING)
@@ -800,12 +819,14 @@ class DeploymentManagerTest(unittest.TestCase):
         package_registrar.package_exists.return_value = False
         application_registrar = Mock()
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
         dmgr = DeploymentManager(repository,
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -828,6 +849,7 @@ class DeploymentManagerTest(unittest.TestCase):
             'status': ApplicationState.STARTED,
             'information': None}
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -835,6 +857,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -857,6 +880,7 @@ class DeploymentManagerTest(unittest.TestCase):
             'status': ApplicationState.NOTCREATED,
             'information': None}
         application_summary_registrar = Mock()
+        application_detailed_summary = Mock()
         environment = {"namespace": "some_namespace", 'webhdfs_host': 'webhdfshost', 'webhdfs_port': 'webhdfsport'}
         config = {"deployer_thread_limit": 10}
 
@@ -864,6 +888,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
@@ -879,6 +904,7 @@ class DeploymentManagerTest(unittest.TestCase):
             'aggregate_status': 'COMPLETED_WITH_NO_FAILURES',
             'component-1': {}
         }}
+        application_detailed_summary = Mock()
         application_registrar.application_has_record.return_value = True
         application_registrar.get_application.return_value = {
             'overrides': {'user': 'username'},
@@ -894,6 +920,7 @@ class DeploymentManagerTest(unittest.TestCase):
                                  package_registrar,
                                  application_registrar,
                                  application_summary_registrar,
+                                 application_detailed_summary,
                                  environment,
                                  config)
         dmgr._get_groups = self._mock_get_groups #pylint: disable =protected-access
